@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 
-import { LoginForm } from "@/features/auth/login-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LoginPage() {
@@ -15,18 +16,24 @@ export default function LoginPage() {
           <ThemeToggle />
         </div>
         <Card className="glass-panel">
-          <CardHeader>
-            <CardTitle>Authentication disabled</CardTitle>
-            <CardDescription>Use the direct dashboard navigation below.</CardDescription>
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+              <Lock className="h-7 w-7 text-primary" />
+            </div>
+            <CardTitle>Authentication Required</CardTitle>
+            <CardDescription>
+              Access to this platform is controlled by your organisation's identity provider.
+              Please sign in through your portal to be granted access.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <LoginForm />
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              Or return to the home page.
-              <Link href="/" className="font-medium text-primary">
-                Home
-              </Link>
+          <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              If you were sent a direct link, please use that link to access the assessment.
+              Your session will be authenticated automatically by the platform.
             </p>
+            <Button asChild className="w-full">
+              <Link href="/">Return to home</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

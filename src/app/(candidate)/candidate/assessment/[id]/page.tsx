@@ -115,6 +115,11 @@ export default async function AssessmentPage({
         nextAssessmentId={nextAssessment?.assessment.id ?? null}
         currentIndex={currentIndex >= 0 ? currentIndex : 0}
         totalScenarios={totalInSession}
+        remainingAssessmentIds={
+          sessionAssessments
+            .slice(currentIndex >= 0 ? currentIndex : 0)
+            .map((a) => a.assessment.id)
+        }
       />
     </div>
   );

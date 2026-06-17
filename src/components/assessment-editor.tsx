@@ -17,6 +17,8 @@ type Props = {
   nextAssessmentId: string | null;
   currentIndex: number;
   totalScenarios: number;
+  /** All remaining assessment IDs in this session (including the current one) */
+  remainingAssessmentIds?: string[];
 };
 
 export function AssessmentEditor({
@@ -25,7 +27,8 @@ export function AssessmentEditor({
   dueAt,
   nextAssessmentId,
   currentIndex,
-  totalScenarios
+  totalScenarios,
+  remainingAssessmentIds = []
 }: Props) {
   const router = useRouter();
   const [subject, setSubject] = useState("");
@@ -41,6 +44,7 @@ export function AssessmentEditor({
     [content]
   );
 
+  // Countdown timer
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSecondsLeft(Math.max(0, differenceInSeconds(new Date(dueAt), new Date())));
@@ -53,6 +57,7 @@ export function AssessmentEditor({
   useEffect(() => {
     if (secondsLeft > 0 || hasSubmittedRef.current) return;
 
+    hasSubmittedRef.current = true;
     const body = JSON.stringify({ assessmentId });
 
     if (navigator.sendBeacon) {
@@ -66,9 +71,15 @@ export function AssessmentEditor({
         keepalive: true
       }).catch(() => null);
     }
-  }, [assessmentId, secondsLeft]);
 
-  // Handle page leave / tab close
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("candidate-assessment-session");
+    }
+    router.push("/candidate/thank-you?reason=timeout");
+    router.refresh();
+  }, [assessmentId, secondsLeft, router]);
+
+  // Handle page leave / tab close (beforeunload)
   useEffect(() => {
     function endAssessment() {
       if (hasSubmittedRef.current || ending) return;
@@ -94,6 +105,71 @@ export function AssessmentEditor({
       window.removeEventListener("beforeunload", endAssessment);
     };
   }, [assessmentId, ending]);
+
+  // ── SECURITY: Tab-switch auto-submit ──────────────────────────────────────
+  // When the user switches tabs or minimises the window, we immediately
+  // submit the current draft (even if empty) and mark ALL remaining
+  // assessments in the session as ended. This prevents candidates from
+  // opening reference material in another tab.
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "hidden") return;
+      if (hasSubmittedRef.current) return;
+
+      hasSubmittedRef.current = true;
+
+      // Submit current assessment with whatever the candidate has typed.
+      // We submit even if empty so the server records the attempt.
+      const currentBody = JSON.stringify({
+        assessmentId,
+        subject: subject.trim() || "(no subject – auto-submitted on tab switch)",
+        content: content.trim() || "(no response – auto-submitted on tab switch)"
+      });
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([currentBody], { type: "application/json" });
+        navigator.sendBeacon("/api/submissions", blob);
+      } else {
+        fetch("/api/submissions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: currentBody,
+          keepalive: true
+        }).catch(() => null);
+      }
+
+      // End all remaining session assessments (the ones not yet submitted)
+      const idsToEnd = remainingAssessmentIds.filter((id) => id !== assessmentId);
+      for (const id of idsToEnd) {
+        const endBody = JSON.stringify({ assessmentId: id });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon("/api/assessments/end", new Blob([endBody], { type: "application/json" }));
+        } else {
+          fetch("/api/assessments/end", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: endBody,
+            keepalive: true
+          }).catch(() => null);
+        }
+      }
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("candidate-assessment-session");
+      }
+      router.push("/candidate/thank-you?reason=tab-switch");
+      router.refresh();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [assessmentId, subject, content, remainingAssessmentIds, router]);
+
+  // ── SECURITY: Prevent copy-paste ──────────────────────────────────────────
+  function blockPaste(event: React.ClipboardEvent) {
+    event.preventDefault();
+    toast.warning("Copy-pasting is not allowed during the assessment.");
+  }
 
   async function submit() {
     if (!subject.trim()) {
@@ -129,7 +205,10 @@ export function AssessmentEditor({
     if (nextAssessmentId) {
       router.push(`/candidate/assessment/${nextAssessmentId}?sessionId=${sessionId}`);
     } else {
-      router.push(`/candidate/results/${assessmentId}`);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("candidate-assessment-session");
+      }
+      router.push("/candidate/thank-you");
     }
     router.refresh();
   }
@@ -165,6 +244,12 @@ export function AssessmentEditor({
         )}
       </div>
 
+      {/* Security notice */}
+      <div className="rounded-2xl border border-amber-300/60 bg-amber-50/60 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300">
+        ⚠️ <strong>Security notice:</strong> Copy-pasting is disabled. Switching tabs or leaving this
+        page will automatically submit your current response and end the remaining scenarios.
+      </div>
+
       <div className="space-y-3 rounded-2xl border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -178,6 +263,7 @@ export function AssessmentEditor({
           placeholder="Write the email subject here..."
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
+          onPaste={blockPaste}
           disabled={secondsLeft === 0 || submitting}
           maxLength={498}
           className="h-12 text-base"
@@ -197,6 +283,7 @@ export function AssessmentEditor({
           placeholder="Write your professional email response here..."
           value={content}
           onChange={(event) => setContent(event.target.value)}
+          onPaste={blockPaste}
           disabled={secondsLeft === 0 || submitting}
         />
       </div>

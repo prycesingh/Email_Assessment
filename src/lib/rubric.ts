@@ -18,7 +18,8 @@ export const evaluationJsonSchema = z.object({
   weaknesses: z.array(z.string().min(1)).max(8),
   improvements: z.array(z.string().min(1)).max(8),
   detailedFeedback: z.string().min(1),
-  verdict: z.string().min(1)
+  verdict: z.string().min(1),
+  aiDetected: z.boolean()
 });
 
 export type EvaluationJson = z.infer<typeof evaluationJsonSchema>;
@@ -38,11 +39,71 @@ export function categoryTotal(categoryScores: CategoryScores) {
 export function normalizeEvaluation(evaluation: EvaluationJson): EvaluationJson {
   const computedScore = Math.max(0, Math.min(100, Math.round(categoryTotal(evaluation.categoryScores))));
 
+  // Apply 10% penalty for AI-detected content
+  const penalizedScore = evaluation.aiDetected
+    ? Math.max(0, Math.round(computedScore * 0.9))
+    : computedScore;
+
   return {
     ...evaluation,
-    overallScore: computedScore,
-    grade: gradeFromScore(computedScore)
+    overallScore: penalizedScore,
+    grade: gradeFromScore(penalizedScore)
   };
+}
+
+/**
+ * Tokenizes text into lowercase words, stripping punctuation.
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Calculates how many matching groups of 3+ consecutive words the candidate
+ * text shares with the model answer, then returns the penalty amount.
+ * Penalty: -0.5 marks for every group of 3 consecutive matching words.
+ */
+export function calculateCopyPenalty(candidateText: string, modelAnswer: string | null | undefined): number {
+  if (!modelAnswer) return 0;
+
+  const candidateTokens = tokenize(candidateText);
+  const modelSet = new Set(tokenize(modelAnswer));
+
+  if (candidateTokens.length < 3) return 0;
+
+  // Build a sliding window of size 3+ to detect runs of matching words
+  let matchingWordCount = 0;
+  let inMatchRun = false;
+
+  for (let i = 0; i < candidateTokens.length; i++) {
+    // Check if a trigram starting here is all in the model
+    if (
+      i + 2 < candidateTokens.length &&
+      modelSet.has(candidateTokens[i]) &&
+      modelSet.has(candidateTokens[i + 1]) &&
+      modelSet.has(candidateTokens[i + 2])
+    ) {
+      if (!inMatchRun) {
+        // Start of a new matching run – count this trigram
+        matchingWordCount += 3;
+        inMatchRun = true;
+      } else {
+        // Extend the current run by 1
+        matchingWordCount += 1;
+      }
+      i += 2; // advance past the trigram
+    } else {
+      inMatchRun = false;
+    }
+  }
+
+  // -0.5 per group of 3 matching words
+  const penaltyGroups = Math.floor(matchingWordCount / 3);
+  return penaltyGroups * 0.5;
 }
 
 export const openAiEvaluationResponseSchema = {
@@ -56,7 +117,8 @@ export const openAiEvaluationResponseSchema = {
     "weaknesses",
     "improvements",
     "detailedFeedback",
-    "verdict"
+    "verdict",
+    "aiDetected"
   ],
   properties: {
     overallScore: { type: "integer", minimum: 0, maximum: 100 },
@@ -95,6 +157,10 @@ export const openAiEvaluationResponseSchema = {
       items: { type: "string" }
     },
     detailedFeedback: { type: "string" },
-    verdict: { type: "string" }
+    verdict: { type: "string" },
+    aiDetected: {
+      type: "boolean",
+      description: "true if the candidate response appears to be AI-generated"
+    }
   }
 } as const;

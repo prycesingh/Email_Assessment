@@ -6,6 +6,9 @@ export const roleNames = ["candidate", "admin", "assessor"] as const;
 
 export type UserRole = (typeof roleNames)[number];
 
+/**
+ * Requires the user to be authenticated. Redirects to /login if not.
+ */
 export async function requireUser() {
   const session = await auth();
 
@@ -16,11 +19,16 @@ export async function requireUser() {
   return session.user;
 }
 
+/**
+ * Requires the user to be authenticated AND to have one of the allowed roles.
+ * - Unauthenticated → redirect to /login
+ * - Wrong role      → redirect to /unauthorized
+ */
 export async function requireRole(allowedRoles: UserRole[]) {
   const user = await requireUser();
 
   if (!allowedRoles.includes(user.role)) {
-    redirect(user.role === "candidate" ? "/candidate" : "/admin");
+    redirect("/unauthorized");
   }
 
   return user;

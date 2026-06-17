@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import type { UserRole } from "@/lib/rbac";
 import { auth } from "@/auth";
 
+/**
+ * Returns { user, response: null } when authenticated, or { user: null, response } when not.
+ * Usage: const { user, response } = await requireApiUser(["admin"]); if (response) return response;
+ */
 export async function requireApiUser(allowedRoles?: UserRole[]) {
   const session = await auth();
 

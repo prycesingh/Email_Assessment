@@ -6,6 +6,7 @@ import {
   evaluations,
   manualScores,
   scenarios,
+  sessionManualScores,
   submissions,
   users,
   type CategoryScores
@@ -42,18 +43,21 @@ export type SessionScenarioResult = {
   scenarioId: string;
   scenarioTitle: string;
   scenarioPrompt: string;
+  scenarioModelAnswer: string | null;
   scenarioDifficulty: ScenarioDifficulty;
   scenarioCategory: string;
   scenarioMaxScore: number;
   subject: string | null;
   content: string | null;
   wordCount: number | null;
+  copyPenalty: number;
   submittedAt: Date | null;
   submissionId: string | null;
   evaluationStatus: typeof evaluations.$inferSelect["status"] | null;
   evaluationOverallScore: number | null;
   evaluationGrade: typeof evaluations.$inferSelect["grade"] | null;
   evaluationVerdict: string | null;
+  aiDetected: boolean;
   categoryScores: CategoryScores | null;
   strengths: string[];
   weaknesses: string[];
@@ -88,6 +92,8 @@ export type SessionSummary = {
   manualWeightedEarned: number;
   manualWeightedTotal: number | null;
   manualGrade: ReturnType<typeof sessionGradeFromScore> | null;
+  evaluatorScore: number | null;
+  evaluatorNotes: string | null;
   scenarios: SessionScenarioResult[];
 };
 
@@ -194,6 +200,16 @@ async function getSessionRows(options: SessionSummaryOptions) {
   return typeof options.limit === "number" ? rows.slice(0, options.limit * 5) : rows;
 }
 
+async function getSessionManualScore(sessionId: string) {
+  const [record] = await db
+    .select()
+    .from(sessionManualScores)
+    .where(eq(sessionManualScores.sessionId, sessionId))
+    .limit(1);
+
+  return record ?? null;
+}
+
 export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
   const rows = (await getSessionRows(options)) as SessionQueryRow[];
   const submissionIds = rows
@@ -218,18 +234,21 @@ export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
       scenarioId: row.scenario.id,
       scenarioTitle: row.scenario.title,
       scenarioPrompt: row.scenario.prompt,
+      scenarioModelAnswer: row.scenario.modelAnswer ?? null,
       scenarioDifficulty: row.scenario.difficulty,
       scenarioCategory: row.scenario.category,
       scenarioMaxScore: scenarioMaxScore(row.scenario.difficulty),
       subject: row.submission?.subject ?? null,
       content: row.submission?.content ?? null,
       wordCount: row.submission?.wordCount ?? null,
+      copyPenalty: (row.submission?.copyPenalty ?? 0) / 100, // stored as x100 integer
       submittedAt: row.submission?.submittedAt ?? null,
       submissionId: row.submission?.id ?? null,
       evaluationStatus: row.evaluation?.status ?? null,
       evaluationOverallScore: row.evaluation?.overallScore ?? null,
       evaluationGrade: row.evaluation?.grade ?? null,
       evaluationVerdict: row.evaluation?.verdict ?? null,
+      aiDetected: row.evaluation?.aiDetected ?? false,
       categoryScores: row.evaluation?.categoryScores ?? null,
       strengths: row.evaluation?.strengths ?? [],
       weaknesses: row.evaluation?.weaknesses ?? [],
@@ -273,6 +292,8 @@ export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
         manualWeightedEarned: scenarioResult.manualWeightedScore ?? 0,
         manualWeightedTotal: null,
         manualGrade: null,
+        evaluatorScore: null,
+        evaluatorNotes: null,
         scenarios: [scenarioResult]
       });
       continue;
@@ -298,6 +319,19 @@ export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
     current.scenarios.push(scenarioResult);
   }
 
+  // Resolve evaluator scores for each session in parallel
+  const sessionIds = [...sessionsById.keys()];
+  const evaluatorScoresBySession = await Promise.all(
+    sessionIds.map((sid) => getSessionManualScore(sid))
+  );
+  const evaluatorScoreMap = new Map<string, { score: number; notes: string | null }>();
+  sessionIds.forEach((sid, i) => {
+    const record = evaluatorScoresBySession[i];
+    if (record) {
+      evaluatorScoreMap.set(sid, { score: record.score, notes: record.notes ?? null });
+    }
+  });
+
   const sessions = [...sessionsById.values()]
     .map((summary) => {
       const scenarios = summary.scenarios.sort((left, right) => {
@@ -314,6 +348,8 @@ export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
           ? roundToTwo(summary.manualWeightedEarned)
           : null;
 
+      const evalRecord = evaluatorScoreMap.get(summary.sessionIdentifier) ?? null;
+
       const nextSummary: SessionSummary = {
         ...summary,
         scenarios,
@@ -321,6 +357,8 @@ export async function getSessionSummaries(options: SessionSummaryOptions = {}) {
         aiGrade: aiWeightedTotal != null ? sessionGradeFromScore(aiWeightedTotal) : null,
         manualWeightedTotal,
         manualGrade: manualWeightedTotal != null ? sessionGradeFromScore(manualWeightedTotal) : null,
+        evaluatorScore: evalRecord?.score ?? null,
+        evaluatorNotes: evalRecord?.notes ?? null,
         statusLabel: buildStatusLabel({
           evaluatedScenarios: summary.evaluatedScenarios,
           submittedScenarios: summary.submittedScenarios,

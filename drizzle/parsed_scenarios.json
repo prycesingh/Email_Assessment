@@ -1,14 +1,164 @@
-import type { CategoryScores } from "@/db/schema";
-
-export const defaultRubricWeights: CategoryScores = {
-  professionalTone: 20,
-  grammarLanguage: 20,
-  clarityEmpathyRespect: 30,
-  structure: 15,
-  completeness: 15
-};
-
-export const scenarioSeedData = [
+[
+  {
+    "title": "Planned Vacation Leave Request",
+    "difficulty": "beginner",
+    "category": "Leave Request",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Follow-Up on Unresolved Ticket",
+    "difficulty": "beginner",
+    "category": "Follow-Up",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Ticket Resolved — Client Notification",
+    "difficulty": "beginner",
+    "category": "Status Update",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "New Client Onboarding Introduction",
+    "difficulty": "beginner",
+    "category": "Introduction",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "End-of-Day Shift Handover",
+    "difficulty": "beginner",
+    "category": "Internal Update",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Partial Outage — Client Notification",
+    "difficulty": "intermediate",
+    "category": "Incident Communication",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Ticket Escalation to Tier 2",
+    "difficulty": "intermediate",
+    "category": "Escalation",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Monthly IT Report to Client Stakeholder",
+    "difficulty": "intermediate",
+    "category": "Stakeholder Update",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Scheduled Maintenance Notification",
+    "difficulty": "intermediate",
+    "category": "Change Request",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Responding to a Client Complaint",
+    "difficulty": "intermediate",
+    "category": "Complaint Response",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "RMA Request to Hardware Vendor",
+    "difficulty": "intermediate",
+    "category": "Vendor Communication",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Phishing Awareness Alert to Client Users",
+    "difficulty": "intermediate",
+    "category": "User Training",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "QBR Summary Email to Client CEO",
+    "difficulty": "advanced",
+    "category": "Executive Communication",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Project Delay Communication to Client",
+    "difficulty": "advanced",
+    "category": "Delay Notification",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "P1 Critical Outage — Executive Escalation",
+    "difficulty": "advanced",
+    "category": "Critical Outage",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Contract Renewal Proposal Email",
+    "difficulty": "advanced",
+    "category": "Contract Renewal",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Business Impact Analysis to Client Board",
+    "difficulty": "advanced",
+    "category": "Executive Communication",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Employee Performance Feedback",
+    "difficulty": "intermediate",
+    "category": "Internal HR",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Data Breach Notification to Client CISO",
+    "difficulty": "advanced",
+    "category": "Crisis Communication",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
+  {
+    "title": "Team Policy Change Communication",
+    "difficulty": "advanced",
+    "category": "Internal Leadership",
+    "prompt": "",
+    "modelAnswer": "",
+    "scoringNotes": ""
+  },
   {
     "title": "Planned Vacation Leave Request",
     "difficulty": "beginner",
@@ -169,4 +319,4 @@ export const scenarioSeedData = [
     "modelAnswer": "Subject: Important Update – On-Call Rotation Program | Starting [Date] | Q&amp;A Session Invite\n\nTeam,\n\nI want to share an important operational update with you directly, and I want to be upfront about what it means for your schedules and how we're going to support you.\n\nWhat's Changing:\nStarting [Date], we will be implementing a structured weekend on-call rotation for senior engineers. Each engineer will be on-call one weekend in eight (roughly once every 2 months), with clear escalation protocols and defined response expectations.\n\nWhy We're Doing This:\nOur client base has grown 40% over the past year, and we've had three P1 incidents on weekends where delayed response impacted client SLAs and damaged relationships we've worked hard to build.\n\nWhat We're Doing to Support You:\n- On-call weekend stipend: $[X] per weekend on rotation\n- Compensatory time off: 1 flex day following an active on-call weekend\n- Upgraded alerting and runbook access via PagerDuty\n- Clear escalation paths: a manager is always a single call away\n- Advance scheduling: 6-week rolling calendar published so you can plan your life\n\nI know this is a change, and I don't take that lightly. I want to hear your concerns directly.\n\nPlease join a Q&amp;A session on [Date/Time]. Your input may shape how we implement this.\n\nThank you for the incredible work you do every day.\n\n[Your Name]\nDirector of Operations | IT By Design",
     "scoringNotes": ""
   }
-] as const;
+]

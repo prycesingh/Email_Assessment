@@ -15,6 +15,7 @@ import {
   submissions
 } from "@/db/schema";
 import {
+  calculateCopyPenalty,
   evaluationJsonSchema,
   normalizeEvaluation,
   openAiEvaluationResponseSchema
@@ -94,7 +95,8 @@ export async function evaluateSubmission(submissionId: string) {
       difficulty: scenarios.difficulty,
       scenarioTitle: scenarios.title,
       scenarioPrompt: scenarios.prompt,
-      scoringNotes: scenarios.scoringNotes
+      scoringNotes: scenarios.scoringNotes,
+      modelAnswer: scenarios.modelAnswer
     })
     .from(submissions)
     .innerJoin(scenarios, eq(submissions.scenarioId, scenarios.id))
@@ -164,7 +166,17 @@ export async function evaluateSubmission(submissionId: string) {
         messages: [
           {
             role: "system",
-            content: promptVersion.systemPrompt
+            content: `${promptVersion.systemPrompt}
+
+AI DETECTION INSTRUCTIONS:
+You MUST set "aiDetected" to true if the candidate's response exhibits any of the following characteristics of AI-generated text:
+- Overly formal, generic, or templated language with no natural variation
+- Suspiciously perfect grammar and sentence structure throughout
+- Repeated use of filler phrases like "I hope this email finds you well", "Please do not hesitate", "I trust this message", "looking forward to hearing from you" in formulaic combinations
+- Lack of specific, concrete details that a human with genuine understanding would typically include
+- Unnaturally balanced paragraph lengths and a textbook-style structure that feels robotic
+- Absence of any personal voice, imperfections, or minor stylistic quirks typical of human writing
+Set "aiDetected" to false if the response reads naturally and shows genuine human understanding of the scenario.`
           },
           {
             role: "user",
@@ -239,6 +251,20 @@ ${submissionContext.content}`
       const outputTokens = completion.usage?.completion_tokens ?? null;
       const evaluationId = randomUUID();
 
+      // Calculate plagiarism/copy penalty against model answer
+      const copyPenaltyAmount = calculateCopyPenalty(
+        submissionContext.content,
+        submissionContext.modelAnswer
+      );
+
+      // Save copy penalty to the submission record
+      if (copyPenaltyAmount > 0) {
+        await db
+          .update(submissions)
+          .set({ copyPenalty: Math.round(copyPenaltyAmount * 100) }) // stored as integer cents (x100)
+          .where(eq(submissions.id, submissionId));
+      }
+
       await db
         .insert(evaluations)
         .values({
@@ -254,7 +280,8 @@ ${submissionContext.content}`
           weaknesses: normalized.weaknesses,
           improvements: normalized.improvements,
           detailedFeedback: normalized.detailedFeedback,
-          verdict: normalized.verdict
+          verdict: normalized.verdict,
+          aiDetected: normalized.aiDetected
         })
         .onDuplicateKeyUpdate({
           set: {
@@ -269,6 +296,7 @@ ${submissionContext.content}`
             improvements: normalized.improvements,
             detailedFeedback: normalized.detailedFeedback,
             verdict: normalized.verdict,
+            aiDetected: normalized.aiDetected,
             updatedAt: new Date()
           }
         });
@@ -301,7 +329,9 @@ ${submissionContext.content}`
         metadata: {
           evaluationId,
           promptVersionId: promptVersion.id,
-          model
+          model,
+          aiDetected: normalized.aiDetected,
+          copyPenalty: copyPenaltyAmount
         },
         ipAddress: null
       });

@@ -22,7 +22,10 @@ export async function POST(request: Request) {
   if (response) return response;
 
   const rateLimit = await enforceRateLimit(`submission:${user.id}`, 10, 60 * 60);
-  if (!rateLimit.allowed) return rateLimitResponse(rateLimit.retryAfterSeconds);
+  const isBypass = process.env.NODE_ENV === "development" || process.env.BYPASS_RATE_LIMIT === "true";
+  if (!rateLimit.allowed && !isBypass) {
+    return rateLimitResponse(rateLimit.retryAfterSeconds);
+  }
 
   const body = await request.json().catch(() => null);
   const parsed = submissionSchema.safeParse(body);

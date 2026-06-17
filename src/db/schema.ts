@@ -226,6 +226,7 @@ export const submissions = mysqlTable(
     subject: varchar("subject", { length: 998 }),
     content: text("content").notNull(),
     wordCount: int("word_count").notNull(),
+    copyPenalty: int("copy_penalty").notNull().default(0),
     ipAddress: varchar("ip_address", { length: 64 }),
     userAgent: text("user_agent"),
     submittedAt: timestamp("submitted_at").notNull().defaultNow()
@@ -259,6 +260,7 @@ export const evaluations = mysqlTable(
     improvements: json("improvements").$type<string[]>(),
     detailedFeedback: text("detailed_feedback"),
     verdict: text("verdict"),
+    aiDetected: boolean("ai_detected").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
   },
@@ -266,6 +268,16 @@ export const evaluations = mysqlTable(
     statusIdx: index("evaluations_status_idx").on(table.status),
     gradeIdx: index("evaluations_grade_idx").on(table.grade)
   })
+);
+
+export const sessionManualScores = mysqlTable(
+  "session_manual_scores",
+  {
+    sessionId: varchar("session_id", { length: 36 }).primaryKey(),
+    score: int("score").notNull(),
+    notes: text("notes"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow()
+  }
 );
 
 export const manualScores = mysqlTable(

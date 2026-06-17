@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireRole } from "@/lib/rbac";
 import { getSessionSummaries } from "@/lib/session-results";
+import {
+  AiDetectionBadge,
+  CandidateStatsButton,
+  EvaluatorScoreForm,
+  StandardResponseToggle
+} from "@/components/session-admin-widgets";
 
 export default async function AdminSessionDetailPage({
   params
@@ -20,8 +26,41 @@ export default async function AdminSessionDetailPage({
     notFound();
   }
 
+  // Fetch candidate historical performance across all sessions
+  const candidateSessions = await getSessionSummaries({ candidateId: session.candidateId });
+
+  // 1. Grade Distribution (candidate wise)
+  const candidateCompletedSessions = candidateSessions.filter((s) => s.aiWeightedTotal != null);
+  const gradeDistribution = candidateCompletedSessions.reduce<Record<string, number>>((totals, s) => {
+    const key = s.aiGrade ?? "Pending";
+    totals[key] = (totals[key] ?? 0) + 1;
+    return totals;
+  }, {});
+
+  // 2. Scenario Performance (candidate wise)
+  const scenarioPerformance = [...candidateSessions
+    .flatMap((s) => s.scenarios)
+    .reduce((map, scenario) => {
+      if (scenario.aiWeightedScore == null) return map;
+      const existing = map.get(scenario.scenarioId) ?? {
+        title: scenario.scenarioTitle,
+        difficulty: scenario.scenarioDifficulty,
+        attempts: 0,
+        weightedTotal: 0,
+        maxScore: scenario.scenarioMaxScore
+      };
+
+      existing.attempts += 1;
+      existing.weightedTotal += scenario.aiWeightedScore;
+      map.set(scenario.scenarioId, existing);
+      return map;
+    }, new Map<string, { title: string; difficulty: string; attempts: number; weightedTotal: number; maxScore: number }>())
+    .values()]
+    .sort((left, right) => right.attempts - left.attempts);
+
   return (
     <div className="space-y-6">
+      {/* ── Session header ── */}
       <Card className="glass-panel">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -32,18 +71,39 @@ export default async function AdminSessionDetailPage({
                 <Badge>{session.totalScenarios} scenarios</Badge>
               </div>
               <CardTitle>Session review</CardTitle>
-              <CardDescription>
-                Candidate email: {session.candidateEmail}
-              </CardDescription>
-              <CardDescription>
-                Session name: {session.displayName}
-              </CardDescription>
+
+              {/* ── Candidate identity block ── */}
+              <div className="grid gap-1 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">Candidate ID:</span>{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{session.candidateId}</code>
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Session name:</span>{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{session.displayName}</code>
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Email:</span>{" "}
+                  {session.candidateEmail}
+                </p>
+              </div>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/admin">Back to dashboard</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <CandidateStatsButton
+                candidateId={session.candidateId}
+                candidateName={session.displayName}
+                candidateEmail={session.candidateEmail}
+                gradeDistribution={gradeDistribution}
+                scenarioPerformance={scenarioPerformance}
+              />
+              <Button asChild variant="outline">
+                <Link href="/admin">Back to dashboard</Link>
+              </Button>
+            </div>
           </div>
         </CardHeader>
+
+        {/* ── Score metrics ── */}
         <CardContent className="grid gap-4 md:grid-cols-4">
           <MetricCard
             label="AI total"
@@ -51,7 +111,7 @@ export default async function AdminSessionDetailPage({
             hint={session.aiGrade ? `Grade ${session.aiGrade}` : "Waiting for completed evaluation"}
           />
           <MetricCard
-            label="Manual total"
+            label="Manual total (per scenario)"
             value={
               session.manualWeightedTotal != null
                 ? `${session.manualWeightedTotal.toFixed(2)} / 10`
@@ -60,9 +120,9 @@ export default async function AdminSessionDetailPage({
             hint={session.manualGrade ? `Grade ${session.manualGrade}` : "Latest assessor entries"}
           />
           <MetricCard
-            label="Started"
-            value={session.startedAt.toLocaleString()}
-            hint="Session launch time"
+            label="Evaluator score"
+            value={session.evaluatorScore != null ? `${session.evaluatorScore} / 10` : "Not set"}
+            hint="Admin override / final score"
           />
           <MetricCard
             label="Submitted"
@@ -70,12 +130,30 @@ export default async function AdminSessionDetailPage({
             hint={`${session.submittedScenarios}/${session.totalScenarios} submitted`}
           />
         </CardContent>
+
+        {/* ── Evaluator score editor ── */}
+        <CardContent className="border-t pt-4">
+          <p className="mb-3 text-sm font-medium">Set evaluator (admin) session score</p>
+          <EvaluatorScoreForm
+            sessionId={session.sessionIdentifier}
+            initialScore={session.evaluatorScore}
+            initialNotes={session.evaluatorNotes}
+          />
+          {session.evaluatorNotes && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              <span className="font-medium">Notes:</span> {session.evaluatorNotes}
+            </p>
+          )}
+        </CardContent>
       </Card>
 
+      {/* ── Scenario score table ── */}
       <Card>
         <CardHeader>
           <CardTitle>Scenario score table</CardTitle>
-          <CardDescription>Each scenario keeps its rubric percentage and contributes weighted marks to the 10-point total.</CardDescription>
+          <CardDescription>
+            Each scenario keeps its rubric percentage and contributes weighted marks to the 10-point total.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
@@ -87,8 +165,8 @@ export default async function AdminSessionDetailPage({
                   <th className="px-4 py-3">Subject</th>
                   <th className="px-4 py-3">AI %</th>
                   <th className="px-4 py-3">AI weighted</th>
-                  <th className="px-4 py-3">Manual %</th>
-                  <th className="px-4 py-3">Manual weighted</th>
+                  <th className="px-4 py-3">Copy penalty</th>
+                  <th className="px-4 py-3">AI detected</th>
                   <th className="px-4 py-3">Status</th>
                 </tr>
               </thead>
@@ -101,7 +179,7 @@ export default async function AdminSessionDetailPage({
                     </td>
                     <td className="px-4 py-4">{scenario.scenarioDifficulty}</td>
                     <td className="px-4 py-4 text-muted-foreground">
-                      {scenario.subject?.trim() ? scenario.subject : "No subject line submitted"}
+                      {scenario.subject?.trim() ? scenario.subject : "No subject submitted"}
                     </td>
                     <td className="px-4 py-4">
                       {scenario.evaluationOverallScore != null
@@ -114,14 +192,14 @@ export default async function AdminSessionDetailPage({
                         : "Pending"}
                     </td>
                     <td className="px-4 py-4">
-                      {scenario.manualOverallScore != null
-                        ? `${scenario.manualOverallScore} / 100`
-                        : "Pending"}
+                      {scenario.copyPenalty > 0
+                        ? <span className="text-amber-600">−{scenario.copyPenalty.toFixed(1)}</span>
+                        : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-4 py-4">
-                      {scenario.manualWeightedScore != null
-                        ? `${scenario.manualWeightedScore.toFixed(2)} / ${scenario.scenarioMaxScore}`
-                        : "Pending"}
+                      {scenario.aiDetected
+                        ? <Badge className="bg-rose-100 text-rose-700 border-rose-300">Yes</Badge>
+                        : <Badge className="bg-green-100 text-green-700 border-green-300">No</Badge>}
                     </td>
                     <td className="px-4 py-4">
                       <Badge>{scenario.assessmentStatus}</Badge>
@@ -134,6 +212,7 @@ export default async function AdminSessionDetailPage({
         </CardContent>
       </Card>
 
+      {/* ── Per-scenario detail cards ── */}
       <div className="space-y-6">
         {session.scenarios.map((scenario) => (
           <Card key={scenario.assessmentId}>
@@ -147,6 +226,12 @@ export default async function AdminSessionDetailPage({
               <CardDescription>{scenario.scenarioPrompt}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* AI detection and copy penalty indicators */}
+              <AiDetectionBadge
+                detected={scenario.aiDetected}
+                copyPenalty={scenario.copyPenalty}
+              />
+
               <div className="rounded-2xl border bg-muted/20 p-4">
                 <p className="text-sm font-medium text-muted-foreground">Subject line</p>
                 <p className="mt-2 text-base font-medium">
@@ -159,6 +244,10 @@ export default async function AdminSessionDetailPage({
                   {scenario.content?.trim() ? scenario.content : "No response submitted."}
                 </p>
               </div>
+
+              {/* Standard response toggle */}
+              <StandardResponseToggle modelAnswer={scenario.scenarioModelAnswer} />
+
               <div className="grid gap-4 md:grid-cols-3">
                 <MetricCard
                   label="AI percentage"

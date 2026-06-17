@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { User, Key, FileText, AlertTriangle, Shield, CheckCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -33,7 +34,15 @@ function clearSession() {
   window.sessionStorage.removeItem(SESSION_KEY);
 }
 
-export function StartAssessmentButton() {
+export function StartAssessmentButton({
+  candidateEmail,
+  candidateId,
+  preGeneratedSessionId
+}: {
+  candidateEmail: string;
+  candidateId: string;
+  preGeneratedSessionId: string;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [existingSession, setExistingSession] = useState<SessionData | null>(null);
@@ -42,13 +51,14 @@ export function StartAssessmentButton() {
     setExistingSession(readSession());
   }, []);
 
+  const activeSessionId = existingSession ? existingSession.sessionId : preGeneratedSessionId;
+
   async function startAssessment() {
     setLoading(true);
 
-    const body: Record<string, unknown> = {};
-    if (existingSession) {
-      body.sessionId = existingSession.sessionId;
-    }
+    const body: Record<string, unknown> = {
+      sessionId: activeSessionId
+    };
 
     const response = await fetch("/api/assessments/start", {
       method: "POST",
@@ -56,9 +66,9 @@ export function StartAssessmentButton() {
       body: JSON.stringify(body)
     });
     const result = await response.json().catch(() => null);
-    setLoading(false);
 
     if (!response.ok) {
+      setLoading(false);
       console.error("/api/assessments/start failed", response.status, result);
       if (result?.nextEligibleAt) {
         toast.error(`Retake available after ${new Date(result.nextEligibleAt).toLocaleString()}.`);
@@ -76,10 +86,10 @@ export function StartAssessmentButton() {
       };
 
       writeSession(session);
-      setExistingSession(session);
     }
 
     router.push(`/candidate/assessment/${result.assessmentId}?sessionId=${result.sessionId}`);
+    router.refresh();
   }
 
   function startNewSession() {
@@ -89,15 +99,91 @@ export function StartAssessmentButton() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button size="lg" onClick={startAssessment} disabled={loading}>
-        {loading ? "Preparing scenarios..." : existingSession ? "Continue session" : "Start assessment"}
-      </Button>
-      {existingSession && (
-        <Button size="lg" variant="outline" onClick={startNewSession}>
-          Start new session
+    <div className="space-y-6">
+      {/* Session Metadata Panel */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex items-start gap-3 rounded-2xl border bg-muted/20 p-4">
+          <User className="mt-1 h-5 w-5 text-primary" />
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Candidate ID</p>
+            <p className="font-mono text-sm font-semibold">{candidateId}</p>
+            <p className="text-xs text-muted-foreground">{candidateEmail}</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl border bg-muted/20 p-4">
+          <Key className="mt-1 h-5 w-5 text-primary" />
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Session ID</p>
+            <p className="font-mono text-sm font-semibold truncate max-w-[280px]">{activeSessionId}</p>
+            <p className="text-xs text-muted-foreground">
+              {existingSession ? (
+                <span className="text-emerald-500 font-medium">Existing session found</span>
+              ) : (
+                "New session ticket generated"
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Instructions Panel */}
+      <div className="rounded-2xl border bg-card p-6 space-y-4">
+        <div className="flex items-center gap-2 border-b pb-3">
+          <FileText className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-lg">Assessment Instructions</h3>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 text-sm">
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500 shrink-0" />
+              <p><strong>Total Duration:</strong> 30 minutes for the entire session.</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500 shrink-0" />
+              <p><strong>Assessment Pool:</strong> 5 randomized scenarios (2 Beginner, 2 Intermediate, 1 Advanced).</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500 shrink-0" />
+              <p><strong>Subject Line:</strong> Ensure you write both a subject line and the email body for each scenario.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500 shrink-0" />
+              <p><strong>Weighted Scoring:</strong> Marks vary by difficulty: Beginner (1.5), Intermediate (2.0), Advanced (3.0).</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <Shield className="mt-0.5 h-4 w-4 text-amber-500 shrink-0" />
+              <p><strong>Anti-Cheating Protection:</strong> Copying or pasting text into the input fields is completely disabled.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Security Warning Banner */}
+        <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">Security Protocol Notice</p>
+            <p className="leading-relaxed">
+              Switching tabs, minimizing the browser window, or navigating away will 
+              <strong> automatically submit</strong> your current response, lock all remaining scenarios, 
+              apply a <strong>10% penalty</strong> to your overall score, and redirect you to the thank you page.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="lg" onClick={startAssessment} disabled={loading}>
+          {loading ? "Preparing scenarios..." : existingSession ? "Continue Session" : "Start Assessment"}
         </Button>
-      )}
+        {existingSession && (
+          <Button size="lg" variant="outline" onClick={startNewSession}>
+            Start New Session
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
